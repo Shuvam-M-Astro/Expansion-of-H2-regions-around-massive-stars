@@ -1,0 +1,356 @@
+#! /bin/bash -e
+## JVJ-V!
+##  AMDG
+##
+## Converts 1D or 2D PLUTO files from .dbl to .dat,
+## based on grid.out and dbl.out. The variable order
+## is as in dbl.out. .tab files are not overwritten
+##
+## With no argument, all .dbl files are converted.
+## Given an Nmax argument, each becomes Nmax/5. File converted to Nmax
+##
+## The number of grid cells is read from the grid file (grid.out).
+## Only options, only relevant for 2D:
+## all thetas or not, and if not: how many angles (roughly)?
+##
+## (c) G.-D. Marleau (MPIA), den 17. Dezember 2014
+## (c) G.-D. Marleau (UniBe), den 22. August 2017
+## (c) G.-D. Marleau (UniTübingen), den 06. November 2018
+
+grid="grid.out"
+dblout="dbl.out"
+PlutVer=4
+dbltail=1    # Run tail directly on the .dbl file -- way faster!
+
+
+# Find out dimension
+if [ $PlutVer -eq 4 ]; then
+   Dim=$(awk 'NR==5{print $3;exit}' $grid)
+   echo " * Number of dimensions: $Dim"
+else
+   echo " *** Dim not implemented for Pluto 3 -> adjust script $0 ***"
+   exit 2
+fi
+
+# you can (approximately, because the last angle is added)
+# number of thetas or the option to edit all,
+# Specify externally: "Nth=all dbl2tab ..." or "Nth=10 dbl2tab ..."
+set allThetas=0 ## also for 1D
+NthOff=10 ## Default value
+if [ $Dim -ge 2 ] && [ "x$Nth" != "x" ]; then   ## the following only when attempting to set NthOff (by Nth on the command line).
+   if [ "x$Nth" == "xalle" ] || [ "x$Nth" == "xwszystkie" ]; then
+      alleThetas=1
+   elif [[ "x$Nth" =~ ^x[1-9][0-9]*$ ]]; then   ## Attention, with double brackets. regex :)!
+      NthOut=$Nth
+   else
+      echo " *** Nth set to '$Nth': but should be either 'all' or a non-zero-starting number ***"
+      exit 2
+   fi
+fi  # Dim
+
+# which files?
+# 
+if [ -n "$1" ]; then  ## -n: check if non-empty character string
+    alle=0
+    Nmax=$1
+    
+    # 2. Argument: N_min
+    # 
+    if [ -n "$2" ]; then
+       Nmin=$2
+    else
+       Nmin=0
+       # for 2D we rarely want all files
+       # -> interpret only one argument as a single file
+       if [ $Dim -eq 2 ]; then
+         Nmin=$Nmax
+       fi
+    fi
+    
+    # 3. Argument: step size
+    # 
+    if [ -n "$3" ]; then
+       if [ $3 -eq 0 ]; then
+          echo " * step given by $3 -> probably an error... *"
+          echo " * usage: $0 <Nmax> [<Nmin=0> [<step=max( 1 , (<Nmax>-<Nmin>)/5 ) ] ] *"
+          exit 1
+       fi
+       Step=$3
+    else
+       Step=$(((Nmax-Nmin)/5))
+       if [ $Step -eq 0 ]; then Step=1;  fi
+    fi
+
+else
+    alle=1
+fi
+
+# Determine script directory
+if [ "x$SCRIPTDIR" == "x" ]; then
+   if [ "x$(readlink $0)" != "x" ]; then
+      SCRIPTDIR=$(dirname $(readlink $0))
+   else
+      SCRIPTDIR=$(dirname $0)
+   fi
+fi
+
+# check if the grid file is there
+if [ ! -f $grid ]; then
+   echo " *** Fatal: $grid does not exist! ***"
+   exit 2
+fi
+
+if [ $PlutVer -eq 3 ]; then
+   No=$(head -1 $grid)
+else
+   Nr=$(awk '$0!~/^#/ && $1 != "" && $2 == ""{print; exit}' $grid)
+   Nth=$(awk '$0!~/^#/ && $1 != "" && $2 == "" && NR>11{print; exit}' $grid)
+fi
+
+# Number of variables: coordinates + variables
+NVar=$(( $(tail -n 1 $dblout | awk '{print NF}') - 6 )) # the first six columns are different
+
+# Print information
+echo " ** With "$Nth"× $Nr cells in theta × r and $NVar variables **"
+
+
+if [ $Dim -ge 2 ] ; then
+   # what angles we want
+   if [ $allThetas -ne 0 ]; then
+      Thetas="`seq 0 $(($Nth-1))`"
+   else
+      if [ $Nth -lt $NthOut ]; then
+         thStep=1
+      else
+         thStep=$(($Nth/$NthOut))
+      fi
+      # do not overshoot, but take the last angle (especially useful if 10-round even number of angles)
+      # no duplication: therefore -v '^0$' and only with $Nth-2 as upper limit (0 and and $Nth-1 are added separately)
+      Thetas="0 `seq 0 $thstep $(($Nth-2)) | grep -v '^0$' | xargs` $(($Nth-1))"
+      #Thetas="`seq $(($Nth-11)) 2 $(($Nth-1)) | xargs`"
+      #Thetas="`seq 892 2 902 | xargs`"
+      #Thetas="`seq 0 2 10 | xargs`"
+      echo " ** From $Nth angles: Only for itheta = $Thetas **"
+   fi
+else
+   theta="0"
+fi
+
+if [ $all -eq 1 ]; then
+   Files=`ls data*.dbl`
+else
+   files=`seq -f 'data.%04g.dbl' "$Nmin" "$step" "$Nmax"`
+fi
+
+for DblFile in $Files ; do
+
+   Dat="${DblFile%.*}"
+   dbl=$DblFile # Source file
+   rGit=$Dat".rGit" # Grid in r
+   thGit=$Dat".thGit" # Grid in theta
+   drGit=$Dat".drGit" # dr
+   dthGit=$Dat".dthGit" # dtheta
+   txt=$Dat".txt" # File with dbl content in one column
+   tmp=$Dat".tmp1" # intermediate file
+   ttmp=$Dat".tmp2" # "
+   ldat=$Dat".ldat" # all columns but for only one theta
+   dat=$Dat".dat" # Final file
+
+   if [ ! -e $dbl ]; then
+      echo " "$dbl" does not exist (yet)"
+      continue
+   fi
+
+   if [[ $dbl -ot $dat ]]; then
+      echo " "$dat" is already there and newer"
+      continue
+   fi
+
+   # delete the old file -> you can always ">>" in the theta loop
+   rm -f $dat
+   
+   
+   ## ----- Coordinate ------ ##
+   
+   # Extract from grid.out r_mid
+   if [ $PlutVer -eq 3 ] ; then tail -n+2 $grid | head -n$No | awk '{print $3}' > $rGit; fi
+   if [ $PlutVer -eq 4 ] ; then tail -n+$((10+$Dim-1)) $grid | head -n$No | awk '{print 0.5*($2+$3)}' > $rGit; fi
+
+   # Extract from grid.out theta_mid
+   if [ $Dim -ge 2 ] ; then
+      if [ $PlutVer -eq 3 ] ; then echo " * DO! *"; exit; fi
+      #10: headers; $Dim: rows in header; +1: empirical correction (+2 for 3rd coordinate)
+      if [ $PlutVer -eq 4 ] ; then tail -n+$((10+$Dim+$Nr-1 +1)) $grid | head -n$Nth | awk '{print 0.5*($2+$3)}' > $thGit; fi
+   fi
+   
+   # extract from grid.out dr
+   if [ $PlutVer -eq 3 ] ; then tail -n+2 $grid | head -n$No | awk '{print $5}' > $drGit; fi
+   if [ $PlutVer -eq 4 ] ; then tail -n+$((10+$Dim-1)) $grid | head -n$No | awk '{print $3-$2}' > $drGit; fi
+
+   # Extract from grid.out dtheta
+   if [ $Dim -ge 2 ] ; then
+      if [ $PlutVer -eq 4 ] ; then tail -n+$((10+$Dim+$Nr-1 +1)) $grid | head -n$Nth | awk '{print $3-$2}' > $dthGit; fi
+   fi
+   
+   dumpy(){
+     hexdump -v -e '1/8 "%.12e"' -e '"\n"' $1 > $2
+   }
+   export -f dumpy
+   
+   ## ----- Convert .dbl file (or not) ------ ##
+   
+   dbldivide=0 # separate .dbl file by variable -- Development for this not finished but no longer necessary since we avoid tail/head now
+   if [ $dbltail -eq 1 ]; then
+      touch $txt # to delete afterwards
+   elif [ $dblshare -ne 1 ]; then
+      # convert the whole .dbl file to a .txt file
+      LC_ALL=C hexdump -v -e '1/8 "%.12e"' -e '"\n"' $dbl > $txt
+      echo ".txt made..."
+   else
+      # split the file into $NVar parts and then convert each part
+      split --bytes=$((8*$Nr*$Nth)) $dbl $dbl- --suffix-length=4 --numeric-suffixes --verbose
+      
+      seq -f%04g 0 $(($NVar-1)) | LC_ALL=C parallel --verbose dumpy $dbl-{} $txt-{}
+   fi
+   
+   
+   ## ----- loop over theta ------ ##
+   
+   ## TODO TODO one could use gnu in parallel (https://www.gnu.org/software/parallel/man.html#EXAMPLE:-Working-as-mutex-and-counting-semaphore)
+   if [ $Dim -ge 2 ] ; then echo -n " ​​itheta: "; fi
+   for iTheta in $Thetas; do
+      
+      if [ $Dim -ge 2 ] && [ $allThetas -eq 0 ]; then
+         dat=$Dat.th$iTheta.dat
+         rm -f $dat # important!
+         dats="$dat $dat"
+      fi
+      
+      if [ $Dim -ge 2 ] && [[ $(($iTheta%10)) -eq 0 || $allThetas -eq 0 ]] ; then echo -n $iTheta" "; fi
+      
+      ## Insert coordinate
+      # r if only 1D
+      if [ $Dim -eq 1 ] ; then
+         cat $rGit > $ldat
+      fi
+      # r and theta if 2D
+      if [ $Dim -ge 2 ] ; then
+         thValue=$(awk 'NR=='$iTheta'+1{print;exit}' $thGit)
+         awk -vthValue=$thValue '{print $1, thValue}' $rGit >> $ldat
+      fi
+      
+extract function(){
+   # from https://unix.stackexchange.com/questions/121794/read-the-middle-of-a-large-file
+   in_file="$1"
+   # the sizes in bytes
+   start=$2
+   length=$3
+   end=$(($start+$length))
+   #block_size=4096
+   block_size=$((8*300)) # usually at least 300 grid cells in r, even in 2D
+   #echo " start, length, end: " $start, $length, $end > /dev/stderr
+   
+   copy_full_size=$(( $end - $start ))
+   # if the condition is true, having at least one full block is not guaranteed
+   if [ $copy_full_size -le $((2*$block_size)) ]; then
+      # through 8 because we know we're always copying 8-byte numbers
+      # skip and count are in units of bs
+      dd if="$in_file" bs=8 skip=$(($start/8)) count=$(($copy_full_size/8)) 2> /dev/null
+   else
+      # Part 1: Beginning piece
+      copy1_size=$(( $block_size - ($start % $block_size) ))
+      copy2_start=$(( $start + $copy1_size ))
+      
+      # Part 2: whole blocks
+      copy2_skip=$(( $copy2_start / $block_size ))
+      copy2_blocks=$(( ($end - $copy2_start) / $block_size ))
+      
+      # Part 3: leftover piece
+      copy3_start=$(( ($copy2_skip + $copy2_blocks) * $block_size ))
+      copy3_size=$(( $end - $copy3_start ))
+      
+      dd if="$in_file" bs=8 skip=$(($start/8)) count=$(($copy1_size/8)) 2> /dev/null
+      dd if="$in_file" bs=$block_size skip="$copy2_skip" count="$copy2_blocks" 2> /dev/null
+      dd if="$in_file" bs=8 skip=$(($copy3_start/8)) count=$(($copy3_size/8)) 2> /dev/null
+   fi
+}
+export -f extract
+      
+      # Insert columns (variables) in order
+      for i in `seq 0 $(($NVar-1))`; do
+         # select the theta column
+         N=$(( ($Nr*$Nth)*$i + 1 + $Nr*$iTheta )) # r varies fastest
+         if [ $dbltail -ne 1 ]; then
+            tail -n+$N $txt | tail -n+1 | head -n$Nr > $tmp # tail +1: Trick from http://superuser.com/questions/554855/how-can-i-fix-a-broken-pipe-error
+         else
+            ## needs coreutils > 8.16 or so :# LC_ALL=C dd if=$dbl skip=$((8*$N)) count=$((8*$Nr)) iflag=skip_bytes,count_bytes | hexdump -v -e '1/8 "%.12e"' -e '"\n"' > $tmp
+            extract $dbl $((8*($N-1))) $((8*$Nr)) | LC_ALL=C hexdump -v -e '1/8 "%.12e"' -e '"\n"' > $tmp
+         fi
+         paste $ldat $tmp > $ttmp
+         mv $ttmp $ldat
+         if [ $allThetas -ne 0 ]; then echo -n "."; fi
+      done
+      
+      # add dr
+      paste $ldat $drGit > $ttmp
+      mv $ttmp $ldat
+      
+      # add dtheta
+      if [ $Dim -ge 2 ] ; then
+         dthValue=$(awk 'NR=='$iTheta'+1{print;exit}' $dthGit)
+         awk -vdth=$dthvalue '{print $0, dth}' $ldat > $ttmp
+         mv $ttmp $ldat
+      fi
+      
+      if [ $Dim -eq 1 ] ; then
+         # ADJUST TOTUN for 2D? At least d/dr ?
+         # Add shock criterion
+         #$SCRIPTDIR/shockflagadd.sh $ldat
+         
+         # Add tau, tau-tau_shock and r-r_shock
+         #$SCRIPTDIR/tauzuzuGuert.awk $ldat > $ttmp
+         #mv $ttmp $ldat
+
+         # Add r_links
+         if [ $PlutVer -eq 3 ] ; then tail -n+2 $grid | head -n$No | awk '{print $2}' > $tmp; fi
+         if [ $PlutVer -eq 4 ] ; then tail -n+$((10+$Dim-1)) $grid | head -n$No | awk '{print $2}' > $tmp; fi
+         
+         paste $ldat $tmp > $ttmp
+         mv $ttmp $ldat
+      fi
+      
+      # empty line between theta blocks for pm3d in gnuplot only if .ge. 2D
+      if [ $Dim -ge 2 ] ; then
+         echo >> $ldat
+      fi
+      
+      cat $ldat >> $dat
+      rm $ldat
+      
+   done # end of loop over theta
+   
+   rm $txt $tmp $rGit $drGit
+   if [ $Dim -ge 2 ]; then
+      rm $thGit $dthGit
+      echo # important
+   fi
+   
+   if [ $Dim -ge 2 ] && [ $allThetas -eq 0 ]; then
+      dat=$date.mancheth.dat
+      rm -f $dat
+      for i in $dats; do cat $i >> $dat; done
+      dats="" # important!
+   fi
+   echo " "$DblFile" -> "$dat
+   
+done
+
+if [ $Dim -eq 1 ]; then
+   echo -n " ​​columns: 1:r "
+   head -n1 $dblout | awk '{for(i=7;i<=NF;i++){printf " %d:%s",i-5,$i}}'
+   echo " "$(($NVar+2))":dx "$(($NVar+3))":r_links"
+else
+   echo -n " ​​2D! columns: 1:r 2:theta"
+   head -n1 $dblout | awk '{for(i=7;i<=NF;i++){printf " %d:%s",i-4,$i}}'
+   echo " "$(($NVar+3))":dr "$(($NVar+4))":dtheta"
+fi
