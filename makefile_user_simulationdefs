@@ -1,0 +1,147 @@
+#########################
+##                     ##
+##  Modules & Options  ##
+##                     ##
+#########################
+## HD or MHD (currently no relativistic modules RHD and RMHD available)
+PHYSICS               = HD
+
+# 1, 2, or 3
+DIMENSIONS            = 1
+
+# 1, 2, or 3
+COMPONENTS            = 1
+
+# CARTESIAN, CYLINDRICAL (2D), POLAR (2D,3D), SPHERICAL
+GEOMETRY              = SPHERICAL
+
+# NO, POTENTIAL, VECTOR, or POTENTIAL+VECTOR
+BODY_FORCE            = POTENTIAL+VECTOR
+
+# NO, POWER_LAW, TABULATED, SNEq, or MINEq
+COOLING               = NO
+
+# FLAT, LINEAR, PARABOLIC, WENO3, or LimO3
+INTERPOLATION         = WENO3
+
+# EULER, RK2, RK3, CHARACTERISTIC_TRACING, or HANCOCK
+TIME_STEPPING         = RK3
+
+# YES or NO
+DIMENSIONAL_SPLITTING = NO
+
+#
+NTRACER               = 0
+
+# YES or NO
+HYDRODYNAMICS         = YES
+
+# ISOTHERMAL, BAROTROPIC, or IDEAL
+EOS                   = IDEAL
+# YES or NO; see entropy_switch.c for flagging details
+ENTROPY_SWITCH        = NO
+
+# YES or NO
+THERMAL_CONDUCTION    = NO
+ROTATING_FRAME        = NO
+INITIAL_SMOOTHING     = NO
+WARNING_MESSAGES      = YES
+PRINT_TO_FILE	      = NO
+INTERNAL_BOUNDARY     = YES
+CHAR_LIMITING         = YES
+
+# NO, ONED, or MULTID
+SHOCK_FLATTENING      = NO
+
+# DEFAULT, MC_LIM, MINMOD_LIM, ...
+#  MC_LIM = least diffusive 3-point stencil
+#  MINMOD_LIM = most diffusive
+LIMITER               = MC_LIM
+
+
+# NO, EXPLICIT, or SUPER_TIME_STEPPING
+VISCOSITY             = NO
+
+# YES or NO
+# "This should be used only with the two-shock Riemann solver."
+ARTIFICIAL_VISCOSITY  = NO
+
+# YES or NO
+SELFGRAVITY           = NO
+MIDPLANESYMMETRY      = NO
+FLUXLIMITEDDIFFUSION  = NO
+IRRADIATION           = NO
+PDVINRT               = NO
+STELLAREVOLUTION      = NO
+STELCOR               = NO
+IONIZATION            = YES
+CHEMISTRY             = NO
+PROTOSTELLAROUTFLOW   = NO
+CAKACCELERATION       = NO
+CAKWIND               = NO
+TURBULENCE            = NO
+
+# 1 or 0
+# TODO: get this from Makemake/Haumea/Sedna.conf?
+PERIODICX             = 0
+PERIODICY             = 0
+PERIODICZ             = 1
+
+ZeroFlux_X1_BEG_INWARD  = NO
+ZeroFlux_X1_BEG_OUTWARD = NO
+ZeroFlux_X1_END_INWARD  = NO
+ZeroFlux_X1_END_OUTWARD = NO
+ZeroFlux_X2_BEG_INWARD  = NO
+ZeroFlux_X2_BEG_OUTWARD = NO
+ZeroFlux_X2_END_INWARD  = NO
+ZeroFlux_X2_END_OUTWARD = NO
+ZeroFlux_X3_BEG_INWARD  = NO
+ZeroFlux_X3_BEG_OUTWARD = NO
+ZeroFlux_X3_END_INWARD  = NO
+ZeroFlux_X3_END_OUTWARD = NO
+
+
+##############
+##          ##
+##  Output  ##
+##          ##
+##############
+# TRUE or FALSE
+USE_HDF5              = FALSE
+USE_PNG               = FALSE
+USE_ASYNC_IO          = FALSE
+WRITEFLDFLUXES        = YES
+
+# 1 or 0
+LOG_OUTPUT            = 0
+
+# YES or NO
+SHOW_TIME_STEPS       = NO
+
+
+################################
+##                            ##
+##  Optimization & Debugging  ##
+##                            ##
+################################
+# YES or NO
+THIS_IS_A_TEST        = NO
+
+# 1 or 0
+DEBUGGING             = 0
+
+CFLAGS                = -O3
+#CFLAGS                = -g
+CFLAGS               +=-Wno-error=unused-variable
+CFLAGS               += -Wall -Werror -Wno-error=unused-variable -Wno-error=unused-function
+CFLAGS               +=-Wno-error=uninitialized
+CFLAGS               +=-Werror=restrict
+CFLAGS               +=-Werror=format-overflow
+CFLAGS               +=-Werror=stringop-truncation
+CFLAGS               +=-Werror=array-bounds
+CFLAGS += -Wno-error
+
+
+#CFLAGS += -DURECMIN=1e-30
+#CFLAGS += -DIONXMIN=0.0
+

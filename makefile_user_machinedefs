@@ -1,0 +1,54 @@
+################
+##            ##
+##  Compiler  ##
+##            ##
+################
+CC           = /home/shuvam/Downloads/petsc-3.1-p8/externalpackages/mpich2-1.0.8/bin/mpicc
+CCTyp        = gcc
+FC           = gfortran
+FCTyp        = gfortran
+
+
+############
+##        ##
+##  belt  ##
+##        ##
+############
+#BELT_DIR     = /Users/kuiper/ownCloud/belt
+BELT_DIR     = /home/shuvam/Downloads/H2/Rolf/belt
+
+
+#############
+##         ##
+##  PETSc  ##
+##         ##
+#############
+PETSC_DIR    = /home/shuvam/Downloads/petsc-3.1-p8
+PETSC_ARCH   = belt_default
+PETSC_HYPRE  = YES
+PETSC_ML     = NO
+PETSC_LAPACK = flapack
+PETSC_BLAS   = fblas
+
+
+################
+##            ##
+##  gfortran  ##
+##            ##
+################
+GFORTRAN         = YES
+GFORTRAN_LIB_DIR = /opt/local/lib/libgcc
+GFORTRAN_LIB     = gfortran.3
+
+
+###########
+##       ##
+##  GSL  ##
+##       ##
+###########
+GSL          = NO
+GSL_DIR      = /Applications/Science/gsl/gsl-2.1-install
+GSL_LIB      = gsl
+
+
+
